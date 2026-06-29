@@ -1,0 +1,2 @@
+[console_scripts]
+forecasting-tracker = forecasting_tracker.cli:main

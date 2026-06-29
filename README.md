@@ -1,0 +1,211 @@
+# Forecasting Tracker
+
+A personal forecasting / prediction market tool. Register predictions before outcomes are known,
+resolve them later, and track your calibration over time with Brier scoring and calibration curves.
+
+---
+
+## Features
+
+- Register predictions with statement, confidence (0-1), deadline, and domain tag
+- Pre-registration enforcement: predictions are locked on creation; confidence cannot be changed
+- Resolve predictions after the deadline with a true/false outcome
+- Brier score per prediction and rolling average
+- ECE (Expected Calibration Error) computed over all resolved predictions
+- Calibration curve visualization data (per-bin accuracy vs confidence)
+- SQLite backend — no external database required
+- FastAPI REST API with full CRUD
+- CLI: `python -m forecasting_tracker`
+- Export to CSV
+
+---
+
+## Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/vvvaibhaverma-123459876/forecasting-tracker.git
+cd forecasting-tracker
+
+# Create a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -e ".[dev]"
+```
+
+The default SQLite database is stored at `~/.forecasting_tracker/predictions.db`.
+Override with the environment variable `FORECASTING_TRACKER_DB_URL`, e.g.:
+
+```bash
+export FORECASTING_TRACKER_DB_URL="sqlite:////path/to/my.db"
+```
+
+---
+
+## CLI Examples
+
+```bash
+# Register a prediction
+python -m forecasting_tracker add "GPT-5 released before 2027" \
+  --confidence 0.8 \
+  --deadline 2026-12-31T23:59:59 \
+  --domain tech
+
+# List predictions
+python -m forecasting_tracker list
+python -m forecasting_tracker list --domain tech --status open
+
+# Show a single prediction as JSON
+python -m forecasting_tracker show 1
+
+# Resolve a prediction (deadline must have passed)
+python -m forecasting_tracker resolve 1 --outcome true
+
+# Calibration statistics
+python -m forecasting_tracker stats
+python -m forecasting_tracker stats --domain tech
+
+# Export to CSV
+python -m forecasting_tracker export --output predictions.csv
+```
+
+---
+
+## API Reference
+
+Start the API server:
+
+```bash
+uvicorn forecasting_tracker.api.app:app --reload
+```
+
+Interactive docs at `http://localhost:8000/docs`.
+
+### Predictions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/predictions/` | Register a new prediction |
+| GET | `/predictions/` | List predictions (filter: `domain`, `status`, `limit`, `offset`) |
+| GET | `/predictions/{id}` | Get a single prediction |
+| POST | `/predictions/{id}/resolve` | Resolve a prediction |
+| DELETE | `/predictions/{id}` | Delete a prediction |
+
+**POST /predictions/** body:
+```json
+{
+  "statement": "X will happen by 2026",
+  "confidence": 0.7,
+  "deadline": "2026-12-31T23:59:59",
+  "domain": "tech",
+  "notes": "optional notes"
+}
+```
+
+**POST /predictions/{id}/resolve** body:
+```json
+{ "outcome": true }
+```
+
+### Statistics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/stats/summary` | Summary stats (total, open, resolved, mean Brier, ECE) |
+| GET | `/stats/brier/rolling` | Rolling mean Brier score time series |
+| GET | `/stats/calibration` | Calibration curve data (bins + plotted series) |
+| GET | `/stats/export/csv` | Export all predictions as CSV |
+
+All stats endpoints accept an optional `?domain=tech` query parameter.
+
+---
+
+## Scoring
+
+### Brier Score
+
+For a single prediction with confidence `p` and binary outcome `o`:
+
+```
+BS = (p - o)²
+```
+
+- Range: [0, 1]. Lower is better.
+- Perfect calibration: 0.0. Random guessing at 0.5: 0.25. Perfectly wrong: 1.0.
+
+### ECE (Expected Calibration Error)
+
+```
+ECE = Σ_b (|B_b| / N) × |acc(B_b) - conf(B_b)|
+```
+
+Groups predictions into equal-width probability bins, then measures the weighted
+average gap between mean accuracy and mean confidence per bin.
+
+### Example Calibration Output
+
+| Bin | Avg Confidence | Avg Accuracy | Count | Gap |
+|-----|---------------|-------------|-------|-----|
+| 0.0–0.1 | 0.08 | 0.05 | 20 | 0.03 |
+| 0.1–0.2 | 0.15 | 0.12 | 34 | 0.03 |
+| 0.2–0.3 | 0.25 | 0.28 | 28 | 0.03 |
+| 0.3–0.4 | 0.35 | 0.31 | 41 | 0.04 |
+| 0.5–0.6 | 0.55 | 0.58 | 55 | 0.03 |
+| 0.7–0.8 | 0.74 | 0.72 | 47 | 0.02 |
+| 0.8–0.9 | 0.85 | 0.83 | 36 | 0.02 |
+| 0.9–1.0 | 0.93 | 0.91 | 22 | 0.02 |
+
+*A well-calibrated forecaster has small gaps across all bins.*
+
+---
+
+## Running Tests
+
+```bash
+python -m pytest tests/ -q
+# With coverage:
+python -m pytest tests/ --cov=forecasting_tracker --cov-report=term-missing
+```
+
+---
+
+## Project Structure
+
+```
+forecasting-tracker/
+  forecasting_tracker/
+    __init__.py
+    __main__.py
+    cli.py               # CLI entry point
+    tracker.py           # Core business logic
+    db/
+      models.py          # SQLAlchemy ORM models
+      database.py        # SQLite engine + session management
+    scoring/
+      brier.py           # Brier score computation
+      ece.py             # Expected Calibration Error
+      calibration.py     # Calibration curve data
+    api/
+      app.py             # FastAPI app factory
+      models.py          # Pydantic v2 schemas
+      routes/
+        predictions.py   # Prediction CRUD routes
+        stats.py         # Stats + export routes
+  tests/
+    conftest.py
+    test_scoring.py
+    test_tracker.py
+    test_api.py
+  .github/workflows/ci.yml
+  requirements.txt
+  pyproject.toml
+  README.md
+```
+
+---
+
+## License
+
+MIT
