@@ -10,6 +10,11 @@ venv/
 .env
 *.db
 *.sqlite
+*.sqlite3
 .coverage
 htmlcov/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+logs/

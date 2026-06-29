@@ -1,6 +1,6 @@
 """Demo: Register predictions, resolve them, check calibration."""
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 db_file = tempfile.mktemp(suffix=".db")
 from forecasting_tracker.db.database import create_db_engine, init_db, get_session_factory
@@ -9,7 +9,7 @@ from forecasting_tracker.tracker import ForecastingTracker
 engine = create_db_engine(f"sqlite:///{db_file}")
 init_db(engine)
 Session = get_session_factory(engine)
-past = datetime.utcnow() - timedelta(days=1)
+past = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=1)
 
 print("=== Forecasting Tracker Demo ===\n")
 predictions = [
